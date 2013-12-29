@@ -9,6 +9,8 @@ import (
   "os"
   "io"
   "io/ioutil"
+  "os/exec"
+  "time"
 )
 
 const API_URL = "https://api.bootic.net/v1"
@@ -131,6 +133,14 @@ func (store *ThemeStore) writeAssets() chan int {
 }
 
 func (store *ThemeStore) Commit () {
+  now := time.Now()
+  cmdStr := "cd " + store.dir + " && git init . && git add . && git commit -m '" + now.String() + "'"
+  log.Println(cmdStr)
+  cmd := exec.Command("bash", "-c", cmdStr )
+  err := cmd.Run()
+  if err != nil {
+    log.Println("error: Could not commit, or nothing to commit.")
+  }
   log.Println("All done")
 }
 
