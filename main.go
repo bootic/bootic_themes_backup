@@ -93,35 +93,45 @@ func (store *ThemeStore) writeTemplates() {
   }
 }
 
-func (store *ThemeStore) writeAssets() {
-  for _, asset := range store.theme.Data.Entities["assets"] {
-    dirAndFile := strings.Join([]string{store.dir, "assets", asset.Properties["file_name"]}, "/")
-    link := asset.Links["file"]
-    if link == nil {
-      link = asset.Links["image"]
-    }
+func (store *ThemeStore) writeAssets() chan int {
+  c := make(chan int)
+
+  for i, asset := range store.theme.Data.Entities["assets"] {
+    go func (asset AssetOrTemplate, i int, c chan int) {
+      dirAndFile := strings.Join([]string{store.dir, "assets", asset.Properties["file_name"]}, "/")
+      link := asset.Links["file"]
+      if link == nil {
+        link = asset.Links["image"]
+      }
     
-    // remove file if exists
-    os.RemoveAll(dirAndFile)
+      // remove file if exists
+      os.RemoveAll(dirAndFile)
 
-    resp, err := http.Get(link["href"])
-    defer resp.Body.Close()
-    if err != nil {
-      log.Println("error: asset not available", link["href"])
-    }
+      resp, err := http.Get(link["href"])
+      defer resp.Body.Close()
+      if err != nil {
+        log.Println("error: asset not available", link["href"])
+      }
 
-    out, err := os.Create(dirAndFile)
-    defer out.Close()
-    if err != nil {
-      log.Fatal("error: Could not create file", dirAndFile)
-    }
+      out, err := os.Create(dirAndFile)
+      defer out.Close()
+      if err != nil {
+        log.Fatal("error: Could not create file", dirAndFile)
+      }
 
-    n, err := io.Copy(out, resp.Body)
-    if err != nil {
-      log.Fatal("error: Could not download to", dirAndFile)
-    }
-    log.Println(dirAndFile, n)
+      _, err = io.Copy(out, resp.Body)
+      if err != nil {
+        log.Fatal("error: Could not download to", dirAndFile)
+      }
+      c <- 1
+      log.Println(dirAndFile, i)
+    }(asset, i, c)
   }
+  return c
+}
+
+func (store *ThemeStore) Commit () {
+  log.Println("All done")
 }
 
 func (store *ThemeStore) Write() {
@@ -130,7 +140,19 @@ func (store *ThemeStore) Write() {
     log.Fatal("Could not write directories for shop " + store.dir)
   }
   store.writeTemplates()
-  store.writeAssets()
+
+  assetsCount := len(store.theme.Data.Entities["assets"])
+  it := 0
+  c := store.writeAssets()
+  for {
+    select {
+    case <- c:
+      it = it + 1
+      if it == assetsCount {
+        store.Commit()
+      }
+    }
+  }
 }
 
 func NewThemeStore (dir string, theme *ThemeRequest) (store *ThemeStore) {
@@ -153,4 +175,8 @@ func main () {
 
   store := NewThemeStore("./" + theme.ShopId, theme)
   store.Write()
+  
+  for {
+    select {}
+  }
 }
