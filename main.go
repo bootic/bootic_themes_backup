@@ -7,6 +7,7 @@ import (
   "errors"
   "encoding/json"
   "os"
+  "io"
   "io/ioutil"
 )
 
@@ -87,7 +88,7 @@ func (store *ThemeStore) writeTemplates() {
     // write file
     err := ioutil.WriteFile(dirAndFile, []byte(template.Properties["body"]), 0644)
     if err != nil {
-      log.Println("Could not write file", dirAndFile)
+      log.Println("error: Could not write file", dirAndFile)
     }
   }
 }
@@ -95,7 +96,31 @@ func (store *ThemeStore) writeTemplates() {
 func (store *ThemeStore) writeAssets() {
   for _, asset := range store.theme.Data.Entities["assets"] {
     dirAndFile := strings.Join([]string{store.dir, "assets", asset.Properties["file_name"]}, "/")
-    log.Println(dirAndFile)
+    link := asset.Links["file"]
+    if link == nil {
+      link = asset.Links["image"]
+    }
+    
+    // remove file if exists
+    os.RemoveAll(dirAndFile)
+
+    resp, err := http.Get(link["href"])
+    defer resp.Body.Close()
+    if err != nil {
+      log.Println("error: asset not available", link["href"])
+    }
+
+    out, err := os.Create(dirAndFile)
+    defer out.Close()
+    if err != nil {
+      log.Fatal("error: Could not create file", dirAndFile)
+    }
+
+    n, err := io.Copy(out, resp.Body)
+    if err != nil {
+      log.Fatal("error: Could not download to", dirAndFile)
+    }
+    log.Println(dirAndFile, n)
   }
 }
 
