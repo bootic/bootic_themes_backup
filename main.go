@@ -11,6 +11,9 @@ import (
   "io/ioutil"
   "os/exec"
   "time"
+  "flag"
+  "github.com/bootic/bootic_zmq"
+  data "github.com/bootic/bootic_go_data"
 )
 
 const API_URL = "https://api.bootic.net/v1"
@@ -171,21 +174,38 @@ func NewThemeStore (dir string, theme *ThemeRequest) (store *ThemeStore) {
 }
 
 func main () {
+  var (
+    zmqAddress     string
+  )
+
+  flag.StringVar(&zmqAddress, "zmqsocket", "tcp://127.0.0.1:6000", "ZMQ socket address to bind to")
+  flag.Parse()
+
   token := os.Getenv("BOOTIC_ACCESS_TOKEN")
 
   if(token == "") {
     log.Fatal("Please set the BOOTIC_ACCESS_TOKEN env variable")
   }
 
-  theme := NewThemeRequest("29", token)
-  err := theme.Get()
-  if err != nil {
-    log.Fatal(err)
-  }
+  // Setup ZMQ subscriber +++++++++++++++++++++++++++++++
+  topic := "theme:"//"theme:create_asset theme:update_asset theme:destroy_asset dynamicTeplate"
+  zmq, _ := booticzmq.NewZMQSubscriber(zmqAddress, topic)
 
-  store := NewThemeStore("./" + theme.ShopId, theme)
-  store.Write()
-  
+  zmq.SubscribeFunc(func(event *data.Event) {
+    subdomain, _ := event.Get("data").Get("account").String()
+    shopId, _ := event.Get("data").Get("shop_id").String()
+    theme := NewThemeRequest(shopId, token)
+    err := theme.Get()
+    if err != nil {
+      log.Fatal(err)
+    }
+
+    store := NewThemeStore("./" + subdomain, theme)
+    store.Write()
+  })
+
+  log.Println("ZMQ socket started on", zmqAddress, "topic '", topic, "'")
+
   for {
     select {}
   }
