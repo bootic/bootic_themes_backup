@@ -175,10 +175,12 @@ func NewThemeStore (dir string, theme *ThemeRequest) (store *ThemeStore) {
 
 func main () {
   var (
-    zmqAddress     string
+    zmqAddress      string
+    dir             string
   )
 
   flag.StringVar(&zmqAddress, "zmqsocket", "tcp://127.0.0.1:6000", "ZMQ socket address to bind to")
+  flag.StringVar(&dir, "dir", "./", "root directory to create Git repositories")
   flag.Parse()
 
   token := os.Getenv("BOOTIC_ACCESS_TOKEN")
@@ -200,11 +202,12 @@ func main () {
       log.Fatal(err)
     }
 
-    store := NewThemeStore("./" + subdomain, theme)
+    store := NewThemeStore(dir + subdomain, theme)
     store.Write()
   })
 
   log.Println("ZMQ socket started on", zmqAddress, "topic '", topic, "'")
+  log.Println("Git repos will be created in", dir)
 
   for {
     select {}
