@@ -13,6 +13,8 @@ import (
   "time"
   "flag"
   "github.com/bootic/bootic_zmq"
+  "path"
+  "path/filepath"
   data "github.com/bootic/bootic_go_data"
 )
 
@@ -83,13 +85,19 @@ type ThemeStore struct {
 }
 
 func (store *ThemeStore) writeTemplates() {
+  // Remove all templates. Git will remove missing ones and update the others.
+  matches, _ := filepath.Glob(store.dir + "/*.*")
+  for _, f := range matches {
+    if path.Base(f) != ".git" { // mmm
+      os.RemoveAll(f)
+    }
+  }
+
   for _, template := range store.theme.Data.Entities["templates"] {
     s := []string{template.Properties["name"], template.Properties["content_type"]}
     fileName := strings.Join(s, ".")
     dirAndFile := strings.Join([]string{store.dir, fileName}, "/")
     log.Println(dirAndFile)
-    // remove file if exists
-    os.RemoveAll(dirAndFile)
     // write file
     err := ioutil.WriteFile(dirAndFile, []byte(template.Properties["body"]), 0644)
     if err != nil {
@@ -137,7 +145,7 @@ func (store *ThemeStore) writeAssets() chan int {
 
 func (store *ThemeStore) Commit () {
   now := time.Now()
-  cmdStr := "cd " + store.dir + " && git init . && git add . && git commit -m '" + now.String() + "'"
+  cmdStr := "cd " + store.dir + " && git init . && git add --all . && git commit -m '" + now.String() + "'"
   cmd := exec.Command("bash", "-c", cmdStr )
   err := cmd.Run()
   if err != nil {
@@ -148,7 +156,9 @@ func (store *ThemeStore) Commit () {
 }
 
 func (store *ThemeStore) Write() {
-  err := os.MkdirAll(strings.Join([]string{store.dir, "assets"}, "/"), 0700)
+  assetsDir := strings.Join([]string{store.dir, "assets"}, "/")
+  _ = os.RemoveAll(assetsDir) // just remove everything. Will be re-downloaded and git will remove missing ones.
+  err := os.MkdirAll(assetsDir, 0700)
   if err != nil {
     log.Fatal("Could not write directories for shop " + store.dir)
   }
