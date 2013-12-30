@@ -201,7 +201,7 @@ func main () {
   }
 
   // Setup ZMQ subscriber +++++++++++++++++++++++++++++++
-  topic := "theme:"//"theme:create_asset theme:update_asset theme:destroy_asset dynamicTeplate"
+  topic := "theme:"
   zmq, _ := booticzmq.NewZMQSubscriber(zmqAddress, topic)
 
   zmq.SubscribeFunc(func(event *data.Event) {
