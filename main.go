@@ -180,6 +180,7 @@ func (store *ThemeStore) DelayedWrite(subdomain string, duration time.Duration, 
         ticker.Stop()
         err := store.theme.Get()
         if err != nil {
+          doneChan <- subdomain // make sure we un-register this shop.
           panic(err)
         }
         go store.Write()
