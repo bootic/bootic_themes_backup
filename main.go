@@ -98,7 +98,6 @@ func (store *ThemeStore) writeTemplates() {
     s := []string{template.Properties["name"], template.Properties["content_type"]}
     fileName := strings.Join(s, ".")
     dirAndFile := strings.Join([]string{store.dir, fileName}, "/")
-    log.Println(dirAndFile)
     // write file
     err := ioutil.WriteFile(dirAndFile, []byte(template.Properties["body"]), 0644)
     if err != nil {
@@ -138,7 +137,6 @@ func (store *ThemeStore) writeAssets() chan int {
         log.Fatal("error: Could not download to", dirAndFile)
       }
       c <- 1
-      log.Println(dirAndFile, i)
     }(asset, i, c)
   }
   return c
@@ -150,9 +148,9 @@ func (store *ThemeStore) Commit () {
   cmd := exec.Command("bash", "-c", cmdStr )
   err := cmd.Run()
   if err != nil {
-    log.Println("error: Could not commit, or nothing to commit.")
+    log.Println("error: Could not commit, or nothing to commit.", store.dir)
   } else {
-    log.Println("Changes commited to repository")
+    log.Println("Changes commited to repository", store.dir)
   }
 }
 
