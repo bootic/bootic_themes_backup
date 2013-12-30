@@ -111,6 +111,11 @@ func (store *ThemeStore) writeAssets() chan int {
 
   for i, asset := range store.theme.Data.Entities["assets"] {
     go func (asset AssetOrTemplate, i int, c chan int) {
+      defer func() {
+        if err := recover(); err != nil {
+          log.Println("Goroutine failed:", err)
+        }
+      }()
       dirAndFile := strings.Join([]string{store.dir, "assets", asset.Properties["file_name"]}, "/")
       link := asset.Links["file"]
       if link == nil {
@@ -182,7 +187,7 @@ func (store *ThemeStore) DelayedWrite(subdomain string, duration time.Duration, 
   go func(){
     defer func() {
       if err := recover(); err != nil {
-        log.Println("Goroutine failed:", err)
+        log.Println("Goroutine failed:", subdomain, err)
       }
     }()
 
@@ -193,7 +198,7 @@ func (store *ThemeStore) DelayedWrite(subdomain string, duration time.Duration, 
         ticker.Stop()
         err := store.theme.Get()
         if err != nil {
-          log.Fatal(err)
+          panic(err)
         }
         go store.Write()
         doneChan <- subdomain
