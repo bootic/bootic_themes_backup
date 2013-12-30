@@ -276,7 +276,7 @@ func main () {
 
   flag.StringVar(&zmqAddress, "zmqsocket", "tcp://127.0.0.1:6000", "ZMQ socket address to bind to")
   flag.StringVar(&dir, "dir", "./", "root directory to create Git repositories")
-  flag.StringVar(&interval, "interval", "5s", "interval to save themes to Git")
+  flag.StringVar(&interval, "interval", "10s", "interval to save themes to Git")
   flag.Parse()
 
   duration, err := time.ParseDuration(interval)

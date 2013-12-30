@@ -1,0 +1,15 @@
+## Bootic Git-based themes backup
+
+This Golang daemon listen for "theme:*" events on the global Bootic ZMQ socket and backs up each shop's theme files to git repositories.
+
+Backing is delayed as per a configurable interval, so updating a shop's theme many times within a short period still only triggers 1 backup request.
+
+### Usage
+
+    BOOTIC_ACCESS_TOKEN=xxx bootic_themes_backup -interval=20s -dir=./
+
+Options are
+
+* interval: interval to delay backups for each shop after changes detected. Example "20s", "5m". Default "10s".
+* dir: relative or absolute directory path to create and maintain Git repositories. Default "./"
+* zmqsocket: address of ZMQ PUB/SUB socket to listen for "theme:*" events. Default "tcp://127.0.0.1:6000".
