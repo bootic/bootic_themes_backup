@@ -82,6 +82,7 @@ func NewThemeRequest (shopId, token string) (req *ThemeRequest) {
 type ThemeStore struct {
   dir string
   theme *ThemeRequest
+  userNames string
 }
 
 func (store *ThemeStore) writeTemplates() {
@@ -145,7 +146,7 @@ func (store *ThemeStore) writeAssets() chan int {
 
 func (store *ThemeStore) Commit () {
   now := time.Now()
-  cmdStr := "cd " + store.dir + " && git init . && git add --all . && git commit -m '" + now.String() + "'"
+  cmdStr := "cd " + store.dir + " && git init . && git add --all . && git commit -m '" + store.userNames + ": " + now.String() + "'"
   cmd := exec.Command("bash", "-c", cmdStr )
   err := cmd.Run()
   if err != nil {
@@ -178,8 +179,8 @@ func (store *ThemeStore) Write() {
   }
 }
 
-func NewThemeStore (dir string, theme *ThemeRequest) (store *ThemeStore) {
-  store = &ThemeStore{dir, theme}
+func NewThemeStore (dir string, theme *ThemeRequest, userNames string) (store *ThemeStore) {
+  store = &ThemeStore{dir, theme, userNames}
   return
 }
 
@@ -205,6 +206,7 @@ func main () {
 
   zmq.SubscribeFunc(func(event *data.Event) {
     subdomain, _ := event.Get("data").Get("account").String()
+    userNames, _ := event.Get("data").Get("user").String()
     shopId, _ := event.Get("data").Get("shop_id").String()
     theme := NewThemeRequest(shopId, token)
     err := theme.Get()
@@ -212,7 +214,7 @@ func main () {
       log.Fatal(err)
     }
 
-    store := NewThemeStore(dir + subdomain, theme)
+    store := NewThemeStore(dir + subdomain, theme, userNames)
     store.Write()
   })
 
