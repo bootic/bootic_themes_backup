@@ -179,20 +179,110 @@ func (store *ThemeStore) Write() {
   }
 }
 
+func (store *ThemeStore) DelayedWrite(subdomain string, duration time.Duration, doneChan chan string) {
+  ticker := time.NewTicker(duration)
+  go func(){
+    defer func() {
+      if err := recover(); err != nil {
+        log.Println("Goroutine failed:", err)
+      }
+    }()
+
+    for {
+      select {
+      case <- ticker.C:
+        log.Println("Ticker done", store.dir, store.theme.ShopId)
+        ticker.Stop()
+        err := store.theme.Get()
+        if err != nil {
+          log.Fatal(err)
+        }
+        go store.Write()
+        doneChan <- subdomain
+      }
+    }
+  }()
+}
+
 func NewThemeStore (dir string, theme *ThemeRequest, userNames string) (store *ThemeStore) {
   store = &ThemeStore{dir, theme, userNames}
   return
 }
 
+type TimedThemeWriter struct {
+  dir string
+  token string
+  Notifier data.EventsChannel
+  duration time.Duration
+  stores map[string]*ThemeStore
+}
+
+func (writer *TimedThemeWriter) listen() {
+  doneChan := make(chan string)
+
+  for {
+    select {
+    case event := <- writer.Notifier:
+      subdomain, _  := event.Get("data").Get("account").String()
+      userNames, _  := event.Get("data").Get("user").String()
+      shopId, _     := event.Get("data").Get("shop_id").String()
+      log.Println("event:", subdomain, userNames, shopId)
+
+      store := writer.stores[subdomain]
+
+      if store == nil { // no store yet. Create.
+        theme := NewThemeRequest(shopId, writer.token)
+        store = NewThemeStore(writer.dir + subdomain, theme, userNames)
+        store.DelayedWrite(subdomain, writer.duration, doneChan)
+        writer.stores[subdomain] = store
+        log.Println("register:", subdomain)
+      } // else do nothing.
+    case subdomain := <- doneChan:
+      // A store is done writing. Un-register it so it can be registered again.
+      log.Println("unregister:", subdomain)
+      delete(writer.stores, subdomain)
+    }
+  }
+}
+
+func NewTimedThemeWriter(dir, token string, duration time.Duration) (writer *TimedThemeWriter) {
+  writer = &TimedThemeWriter{
+    dir: dir,
+    token: token,
+    Notifier: make(data.EventsChannel, 1),
+    duration: duration,
+    stores: make(map[string]*ThemeStore),
+  }
+
+  go writer.listen()
+
+  return
+}
+// func (writer *TimedThemeWriter) tick() {
+//   for {
+//     select {
+//     case <- writer.ticker.C:
+//       log.Println("Tick!")
+//     }
+//   }
+// }
+
 func main () {
   var (
     zmqAddress      string
     dir             string
+    interval        string
   )
 
   flag.StringVar(&zmqAddress, "zmqsocket", "tcp://127.0.0.1:6000", "ZMQ socket address to bind to")
   flag.StringVar(&dir, "dir", "./", "root directory to create Git repositories")
+  flag.StringVar(&interval, "interval", "5s", "interval to save themes to Git")
   flag.Parse()
+
+  duration, err := time.ParseDuration(interval)
+  if err != nil {
+    panic("INTERVAL cannot be parsed")
+  }
 
   token := os.Getenv("BOOTIC_ACCESS_TOKEN")
 
@@ -204,19 +294,9 @@ func main () {
   topic := "theme:"
   zmq, _ := booticzmq.NewZMQSubscriber(zmqAddress, topic)
 
-  zmq.SubscribeFunc(func(event *data.Event) {
-    subdomain, _ := event.Get("data").Get("account").String()
-    userNames, _ := event.Get("data").Get("user").String()
-    shopId, _ := event.Get("data").Get("shop_id").String()
-    theme := NewThemeRequest(shopId, token)
-    err := theme.Get()
-    if err != nil {
-      log.Fatal(err)
-    }
+  timedWriter := NewTimedThemeWriter(dir, token, duration)
 
-    store := NewThemeStore(dir + subdomain, theme, userNames)
-    store.Write()
-  })
+  zmq.SubscribeToType(timedWriter.Notifier, "all")
 
   log.Println("ZMQ socket started on", zmqAddress, "topic '", topic, "'")
   log.Println("Git repos will be created in", dir)
