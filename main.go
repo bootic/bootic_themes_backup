@@ -106,45 +106,35 @@ func (store *ThemeStore) writeTemplates() {
   }
 }
 
-func (store *ThemeStore) writeAssets() chan int {
-  c := make(chan int)
+func (store *ThemeStore) writeAssets() {
 
-  for i, asset := range store.theme.Data.Entities["assets"] {
-    go func (asset AssetOrTemplate, i int, c chan int) {
-      defer func() {
-        if err := recover(); err != nil {
-          log.Println("Goroutine failed:", err)
-        }
-      }()
-      dirAndFile := strings.Join([]string{store.dir, "assets", asset.Properties["file_name"]}, "/")
-      link := asset.Links["file"]
-      if link == nil {
-        link = asset.Links["image"]
-      }
-    
-      // remove file if exists
-      os.RemoveAll(dirAndFile)
+  for _, asset := range store.theme.Data.Entities["assets"] {
+    dirAndFile := strings.Join([]string{store.dir, "assets", asset.Properties["file_name"]}, "/")
+    link := asset.Links["file"]
+    if link == nil {
+      link = asset.Links["image"]
+    }
 
-      resp, err := http.Get(link["href"])
-      defer resp.Body.Close()
-      if err != nil {
-        log.Println("error: asset not available", link["href"])
-      }
+    // remove file if exists
+    os.RemoveAll(dirAndFile)
 
-      out, err := os.Create(dirAndFile)
-      defer out.Close()
-      if err != nil {
-        log.Fatal("error: Could not create file", dirAndFile)
-      }
+    resp, err := http.Get(link["href"])
+    defer resp.Body.Close()
+    if err != nil {
+      log.Println("error: asset not available", link["href"])
+    }
 
-      _, err = io.Copy(out, resp.Body)
-      if err != nil {
-        log.Fatal("error: Could not download to", dirAndFile)
-      }
-      c <- 1
-    }(asset, i, c)
+    out, err := os.Create(dirAndFile)
+    defer out.Close()
+    if err != nil {
+      panic("error: Could not create file " + dirAndFile)
+    }
+
+    _, err = io.Copy(out, resp.Body)
+    if err != nil {
+      panic("error: Could not download to" + dirAndFile)
+    }
   }
-  return c
 }
 
 func (store *ThemeStore) Commit () {
@@ -164,22 +154,14 @@ func (store *ThemeStore) Write() {
   _ = os.RemoveAll(assetsDir) // just remove everything. Will be re-downloaded and git will remove missing ones.
   err := os.MkdirAll(assetsDir, 0700)
   if err != nil {
-    log.Fatal("Could not write directories for shop " + store.dir)
+    log.Println("Could not write directories for shop " + store.dir)
+    return
   }
-  store.writeTemplates()
 
-  assetsCount := len(store.theme.Data.Entities["assets"])
-  it := 0
-  c := store.writeAssets()
-  for {
-    select {
-    case <- c:
-      it = it + 1
-      if it == assetsCount {
-        store.Commit()
-      }
-    }
-  }
+  store.writeTemplates()
+  store.writeAssets()
+
+  store.Commit()
 }
 
 func (store *ThemeStore) DelayedWrite(subdomain string, duration time.Duration, doneChan chan string) {
@@ -187,7 +169,7 @@ func (store *ThemeStore) DelayedWrite(subdomain string, duration time.Duration, 
   go func(){
     defer func() {
       if err := recover(); err != nil {
-        log.Println("Goroutine failed:", subdomain, err)
+        log.Println("Goroutine failed 2:", subdomain, err)
       }
     }()
 
