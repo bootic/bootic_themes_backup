@@ -212,7 +212,8 @@ func (writer *TimedThemeWriter) listen() {
       subdomain, _  := event.Get("data").Get("account").String()
       userNames, _  := event.Get("data").Get("user").String()
       shopId, _     := event.Get("data").Get("shop_id").String()
-      log.Println("event:", subdomain, userNames, shopId)
+      hostname, _   := event.Get("data").Get("system").Get("host").String()
+      log.Println("event:", subdomain, userNames, shopId, hostname)
 
       store := writer.stores[subdomain]
 
