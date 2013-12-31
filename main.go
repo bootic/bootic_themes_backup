@@ -127,12 +127,12 @@ func (store *ThemeStore) writeAssets() {
     out, err := os.Create(dirAndFile)
     defer out.Close()
     if err != nil {
-      panic("error: Could not create file " + dirAndFile)
-    }
-
-    _, err = io.Copy(out, resp.Body)
-    if err != nil {
-      panic("error: Could not download to" + dirAndFile)
+      log.Println("error: Could not create file ", dirAndFile)
+    } else {
+      _, err = io.Copy(out, resp.Body)
+      if err != nil {
+        log.Println("error: Could not download to ", dirAndFile)
+      }
     }
   }
 }
