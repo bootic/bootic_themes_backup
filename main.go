@@ -80,6 +80,7 @@ func NewThemeRequest (shopId, token string) (req *ThemeRequest) {
 }
 
 type ThemeStore struct {
+  Subdomain string
   dir string
   theme *ThemeRequest
   userNames string
@@ -164,29 +165,35 @@ func (store *ThemeStore) Write() {
   store.Commit()
 }
 
-func (store *ThemeStore) DelayedWrite(subdomain string, duration time.Duration, doneChan chan string) {
+func (store *ThemeStore) DelayedWrite(duration time.Duration, bufferChan chan int, doneChan chan string) {
 
   go func(){
     defer func() {
       if err := recover(); err != nil {
-        log.Println("Goroutine failed 2:", subdomain, err)
+        log.Println(store.Subdomain, "Goroutine failed 2:", err)
+        // Make sure we free space in the buffer
+        <- bufferChan
       }
     }()
 
     time.Sleep(duration)
+    //  Start work. This will block if buffer is full.
+    bufferChan <- 1
 
     err := store.theme.Get()
     if err != nil {
-      doneChan <- subdomain // make sure we un-register this shop.
+      doneChan <- store.Subdomain // make sure we un-register this shop.
       panic(err)
     }
-    go store.Write()
-    doneChan <- subdomain
+    store.Write()
+    // Done. Free space in the buffer
+    <- bufferChan
+    doneChan <- store.Subdomain
   }()
 }
 
-func NewThemeStore (dir string, theme *ThemeRequest, userNames string) (store *ThemeStore) {
-  store = &ThemeStore{dir, theme, userNames}
+func NewThemeStore (subdomain, dir string, theme *ThemeRequest, userNames string) (store *ThemeStore) {
+  store = &ThemeStore{subdomain, dir, theme, userNames}
   return
 }
 
@@ -198,8 +205,9 @@ type TimedThemeWriter struct {
   stores map[string]*ThemeStore
 }
 
-func (writer *TimedThemeWriter) listen() {
+func (writer *TimedThemeWriter) listen(writeConcurrency int) {
   doneChan := make(chan string)
+  bufferChan := make(chan int, writeConcurrency)
 
   for {
     select {
@@ -214,10 +222,11 @@ func (writer *TimedThemeWriter) listen() {
 
       if store == nil { // no store yet. Create.
         theme := NewThemeRequest(shopId, writer.token)
-        store = NewThemeStore(writer.dir + subdomain, theme, userNames)
-        store.DelayedWrite(subdomain, writer.duration, doneChan)
+        store = NewThemeStore(subdomain, writer.dir + subdomain, theme, userNames)
         writer.stores[subdomain] = store
         log.Println("register:", subdomain)
+        log.Println("buffer", store.Subdomain)
+        store.DelayedWrite(writer.duration, bufferChan, doneChan)
       } // else do nothing.
     case subdomain := <- doneChan:
       // A store is done writing. Un-register it so it can be registered again.
@@ -227,7 +236,7 @@ func (writer *TimedThemeWriter) listen() {
   }
 }
 
-func NewTimedThemeWriter(dir, token string, duration time.Duration) (writer *TimedThemeWriter) {
+func NewTimedThemeWriter(dir, token string, duration time.Duration, writeConcurrency int) (writer *TimedThemeWriter) {
   writer = &TimedThemeWriter{
     dir: dir,
     token: token,
@@ -236,29 +245,23 @@ func NewTimedThemeWriter(dir, token string, duration time.Duration) (writer *Tim
     stores: make(map[string]*ThemeStore),
   }
 
-  go writer.listen()
+  go writer.listen(writeConcurrency)
 
   return
 }
-// func (writer *TimedThemeWriter) tick() {
-//   for {
-//     select {
-//     case <- writer.ticker.C:
-//       log.Println("Tick!")
-//     }
-//   }
-// }
 
 func main () {
   var (
     zmqAddress      string
     dir             string
     interval        string
+    writeConcurrency int
   )
 
   flag.StringVar(&zmqAddress, "zmqsocket", "tcp://127.0.0.1:6000", "ZMQ socket address to bind to")
   flag.StringVar(&dir, "dir", "./", "root directory to create Git repositories")
   flag.StringVar(&interval, "interval", "10s", "interval to save themes to Git")
+  flag.IntVar(&writeConcurrency, "c", 10, "Git write concurrency buffer")
   flag.Parse()
 
   duration, err := time.ParseDuration(interval)
@@ -276,12 +279,12 @@ func main () {
   topic := "theme:"
   zmq, _ := booticzmq.NewZMQSubscriber(zmqAddress, topic)
 
-  timedWriter := NewTimedThemeWriter(dir, token, duration)
+  timedWriter := NewTimedThemeWriter(dir, token, duration, writeConcurrency)
 
   zmq.SubscribeToType(timedWriter.Notifier, "all")
 
   log.Println("ZMQ socket started on", zmqAddress, "topic '", topic, "'")
-  log.Println("Git repos will be created in", dir)
+  log.Println("Git repos will be created in", dir, ". Write concurrency of ", writeConcurrency)
 
   for {
     select {}
