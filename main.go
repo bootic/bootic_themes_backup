@@ -165,7 +165,7 @@ func (store *ThemeStore) Write() {
 }
 
 func (store *ThemeStore) DelayedWrite(subdomain string, duration time.Duration, doneChan chan string) {
-  ticker := time.NewTicker(duration)
+
   go func(){
     defer func() {
       if err := recover(); err != nil {
@@ -173,20 +173,15 @@ func (store *ThemeStore) DelayedWrite(subdomain string, duration time.Duration, 
       }
     }()
 
-    for {
-      select {
-      case <- ticker.C:
-        log.Println("Ticker done", store.dir, store.theme.ShopId)
-        ticker.Stop()
-        err := store.theme.Get()
-        if err != nil {
-          doneChan <- subdomain // make sure we un-register this shop.
-          panic(err)
-        }
-        go store.Write()
-        doneChan <- subdomain
-      }
+    time.Sleep(duration)
+
+    err := store.theme.Get()
+    if err != nil {
+      doneChan <- subdomain // make sure we un-register this shop.
+      panic(err)
     }
+    go store.Write()
+    doneChan <- subdomain
   }()
 }
 
