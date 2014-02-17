@@ -110,31 +110,37 @@ func (store *ThemeStore) writeTemplates() {
 func (store *ThemeStore) writeAssets() {
 
   for _, asset := range store.theme.Data.Entities["assets"] {
-    dirAndFile := strings.Join([]string{store.dir, "assets", asset.Properties["file_name"]}, "/")
-    link := asset.Links["file"]
-    if link == nil {
-      link = asset.Links["image"]
-    }
-
-    // remove file if exists
-    os.RemoveAll(dirAndFile)
-
-    resp, err := http.Get(link["href"])
-    defer resp.Body.Close()
-    if err != nil {
-      log.Println("error: asset not available", link["href"])
-    }
-
-    out, err := os.Create(dirAndFile)
-    defer out.Close()
-    if err != nil {
-      log.Println("error: Could not create file ", dirAndFile)
-    } else {
-      _, err = io.Copy(out, resp.Body)
-      if err != nil {
-        log.Println("error: Could not download to ", dirAndFile)
+    // deferred calls won't trigger until the wrapping function returns.
+    // So it's good idea to wrap iterations in functions when closing inside a loop
+    // Otherwise I sometimes get "too many open files"
+    // https://groups.google.com/forum/#!topic/golang-nuts/7yXXjgcOikM
+    func() {
+      dirAndFile := strings.Join([]string{store.dir, "assets", asset.Properties["file_name"]}, "/")
+      link := asset.Links["file"]
+      if link == nil {
+        link = asset.Links["image"]
       }
-    }
+
+      // remove file if exists
+      os.RemoveAll(dirAndFile)
+
+      resp, err := http.Get(link["href"])
+      defer resp.Body.Close()
+      if err != nil {
+        log.Println("error: asset not available", link["href"])
+      }
+
+      out, err := os.Create(dirAndFile)
+      defer out.Close()
+      if err != nil {
+        log.Println("error: Could not create file ", dirAndFile)
+      } else {
+        _, err = io.Copy(out, resp.Body)
+        if err != nil {
+          log.Println("error: Could not download to ", dirAndFile)
+        }
+      }
+    }()
   }
 }
 
