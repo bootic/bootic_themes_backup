@@ -1,51 +1,51 @@
 package main
 
 import (
-  "log"
-  "strings"
-  "net/http"
-  "errors"
   "encoding/json"
-  "os"
+  "errors"
+  "flag"
+  data "github.com/bootic/bootic_go_data"
+  "github.com/bootic/bootic_zmq"
   "io"
   "io/ioutil"
+  "log"
+  "net/http"
+  "os"
   "os/exec"
-  "time"
-  "flag"
-  "github.com/bootic/bootic_zmq"
   "path"
   "path/filepath"
-  data "github.com/bootic/bootic_go_data"
+  "strings"
+  "time"
 )
 
 const API_URL = "https://api.bootic.net/v1"
 
 type AssetOrTemplate struct {
-  Class []string
+  Class      []string
   Properties map[string]string
-  Links map[string]map[string]string
+  Links      map[string]map[string]string
 }
 type Entity struct {
-  Class []string
+  Class      []string
   Properties map[string]string
-  Entities map[string][]AssetOrTemplate
-  Links map[string]map[string]string
+  Entities   map[string][]AssetOrTemplate
+  Links      map[string]map[string]string
 }
 
 type ThemeRequest struct {
   ShopId string
-  token string
-  Data *Entity
-  conn *http.Client
+  token  string
+  Data   *Entity
+  conn   *http.Client
 }
 
-func (req * ThemeRequest) Get () error {
+func (req *ThemeRequest) Get() error {
   segments := []string{API_URL, "shops", req.ShopId, "theme.json"}
   url := strings.Join(segments, "/")
   log.Println("getting", url)
 
   request, _ := http.NewRequest("GET", url, nil)
-  request.Header.Set("Authorization", "Bearer " + req.token)
+  request.Header.Set("Authorization", "Bearer "+req.token)
   resp, err := req.conn.Do(request)
   if err != nil {
     return err
@@ -72,7 +72,7 @@ func (req * ThemeRequest) Get () error {
   return nil
 }
 
-func NewThemeRequest (shopId, token string) (req *ThemeRequest) {
+func NewThemeRequest(shopId, token string) (req *ThemeRequest) {
   var t *Entity
   conn := &http.Client{}
   req = &ThemeRequest{shopId, token, t, conn}
@@ -81,8 +81,8 @@ func NewThemeRequest (shopId, token string) (req *ThemeRequest) {
 
 type ThemeStore struct {
   Subdomain string
-  dir string
-  theme *ThemeRequest
+  dir       string
+  theme     *ThemeRequest
   userNames string
 }
 
@@ -144,10 +144,10 @@ func (store *ThemeStore) writeAssets() {
   }
 }
 
-func (store *ThemeStore) Commit () {
+func (store *ThemeStore) Commit() {
   now := time.Now()
   cmdStr := "cd " + store.dir + " && git init . && git add --all . && git commit -m '" + store.userNames + ": " + now.String() + "'"
-  cmd := exec.Command("bash", "-c", cmdStr )
+  cmd := exec.Command("bash", "-c", cmdStr)
   err := cmd.Run()
   if err != nil {
     log.Println("error: Could not commit, or nothing to commit.", store.dir)
@@ -173,12 +173,12 @@ func (store *ThemeStore) Write() {
 
 func (store *ThemeStore) DelayedWrite(duration time.Duration, bufferChan chan int, doneChan chan string) {
 
-  go func(){
+  go func() {
     defer func() {
       if err := recover(); err != nil {
         log.Println(store.Subdomain, "Goroutine failed 2:", err)
         // Make sure we free space in the buffer
-        <- bufferChan
+        <-bufferChan
       }
     }()
 
@@ -193,22 +193,22 @@ func (store *ThemeStore) DelayedWrite(duration time.Duration, bufferChan chan in
     }
     store.Write()
     // Done. Free space in the buffer
-    <- bufferChan
+    <-bufferChan
     doneChan <- store.Subdomain
   }()
 }
 
-func NewThemeStore (subdomain, dir string, theme *ThemeRequest, userNames string) (store *ThemeStore) {
+func NewThemeStore(subdomain, dir string, theme *ThemeRequest, userNames string) (store *ThemeStore) {
   store = &ThemeStore{subdomain, dir, theme, userNames}
   return
 }
 
 type TimedThemeWriter struct {
-  dir string
-  token string
+  dir      string
+  token    string
   Notifier data.EventsChannel
   duration time.Duration
-  stores map[string]*ThemeStore
+  stores   map[string]*ThemeStore
 }
 
 func (writer *TimedThemeWriter) listen(writeConcurrency int) {
@@ -217,24 +217,24 @@ func (writer *TimedThemeWriter) listen(writeConcurrency int) {
 
   for {
     select {
-    case event := <- writer.Notifier:
-      subdomain, _  := event.Get("data").Get("account").String()
-      userNames, _  := event.Get("data").Get("user").String()
-      shopId, _     := event.Get("data").Get("shop_id").String()
-      hostname, _   := event.Get("data").Get("system").Get("host").String()
+    case event := <-writer.Notifier:
+      subdomain, _ := event.Get("data").Get("account").String()
+      userNames, _ := event.Get("data").Get("user").String()
+      shopId, _ := event.Get("data").Get("shop_id").String()
+      hostname, _ := event.Get("data").Get("system").Get("host").String()
       log.Println("event:", subdomain, userNames, shopId, hostname)
 
       store := writer.stores[subdomain]
 
       if store == nil { // no store yet. Create.
         theme := NewThemeRequest(shopId, writer.token)
-        store = NewThemeStore(subdomain, writer.dir + subdomain, theme, userNames)
+        store = NewThemeStore(subdomain, writer.dir+subdomain, theme, userNames)
         writer.stores[subdomain] = store
         log.Println("register:", subdomain)
         log.Println("buffer", store.Subdomain)
         store.DelayedWrite(writer.duration, bufferChan, doneChan)
       } // else do nothing.
-    case subdomain := <- doneChan:
+    case subdomain := <-doneChan:
       // A store is done writing. Un-register it so it can be registered again.
       log.Println("unregister:", subdomain)
       delete(writer.stores, subdomain)
@@ -244,11 +244,11 @@ func (writer *TimedThemeWriter) listen(writeConcurrency int) {
 
 func NewTimedThemeWriter(dir, token string, duration time.Duration, writeConcurrency int) (writer *TimedThemeWriter) {
   writer = &TimedThemeWriter{
-    dir: dir,
-    token: token,
+    dir:      dir,
+    token:    token,
     Notifier: make(data.EventsChannel, 1),
     duration: duration,
-    stores: make(map[string]*ThemeStore),
+    stores:   make(map[string]*ThemeStore),
   }
 
   go writer.listen(writeConcurrency)
@@ -256,11 +256,11 @@ func NewTimedThemeWriter(dir, token string, duration time.Duration, writeConcurr
   return
 }
 
-func main () {
+func main() {
   var (
-    zmqAddress      string
-    dir             string
-    interval        string
+    zmqAddress       string
+    dir              string
+    interval         string
     writeConcurrency int
   )
 
@@ -277,7 +277,7 @@ func main () {
 
   token := os.Getenv("BOOTIC_ACCESS_TOKEN")
 
-  if(token == "") {
+  if token == "" {
     log.Fatal("Please set the BOOTIC_ACCESS_TOKEN env variable")
   }
 
