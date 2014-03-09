@@ -232,7 +232,7 @@ func (writer *TimedThemeWriter) listen(writeConcurrency int) {
         writer.stores[subdomain] = store
         log.Println("register:", subdomain)
         log.Println("buffer", store.Subdomain)
-        store.DelayedWrite(writer.duration, bufferChan, doneChan)
+        go store.DelayedWrite(writer.duration, bufferChan, doneChan)
       } // else do nothing.
     case subdomain := <-doneChan:
       // A store is done writing. Un-register it so it can be registered again.
