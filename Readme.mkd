@@ -2,7 +2,7 @@
 
 This Golang daemon listens for "theme:*" events on the global Bootic ZMQ socket and backs up each shop's theme files to git repositories.
 
-Backing is delayed as per a configurable interval, so updating a shop's theme many times within a short period still only triggers 1 backup request.
+Backing up is delayed as per a configurable interval, so updating a shop's theme many times within a short period still only triggers 1 backup request.
 
 ### Usage
 
