@@ -179,6 +179,8 @@ func (store *ThemeStore) DelayedWrite(duration time.Duration, bufferChan chan in
         log.Println(store.Subdomain, "Goroutine failed 2:", err)
         // Make sure we free space in the buffer
         <-bufferChan
+        // Make sure we unregister the store so it can try again
+        doneChan <- store.Subdomain
       }
     }()
 
