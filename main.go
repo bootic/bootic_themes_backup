@@ -18,8 +18,6 @@ import (
   "time"
 )
 
-const API_URL = "https://api.bootic.net/v1"
-
 type AssetOrTemplate struct {
   Class      []string
   Properties map[string]string
@@ -35,12 +33,13 @@ type Entity struct {
 type ThemeRequest struct {
   ShopId string
   token  string
+  apiUrl string
   Data   *Entity
   conn   *http.Client
 }
 
 func (req *ThemeRequest) Get() error {
-  segments := []string{API_URL, "shops", req.ShopId, "theme.json"}
+  segments := []string{req.apiUrl, "shops", req.ShopId, "theme.json"}
   url := strings.Join(segments, "/")
   log.Println("getting", url)
 
@@ -72,10 +71,10 @@ func (req *ThemeRequest) Get() error {
   return nil
 }
 
-func NewThemeRequest(shopId, token string) (req *ThemeRequest) {
+func NewThemeRequest(shopId, token string, apiUrl string) (req *ThemeRequest) {
   var t *Entity
   conn := &http.Client{}
-  req = &ThemeRequest{shopId, token, t, conn}
+  req = &ThemeRequest{shopId, token, apiUrl, t, conn}
   return req
 }
 
@@ -208,6 +207,7 @@ func NewThemeStore(subdomain, dir string, theme *ThemeRequest, userNames string)
 type TimedThemeWriter struct {
   dir      string
   token    string
+  apiUrl   string
   Notifier data.EventsChannel
   duration time.Duration
   stores   map[string]*ThemeStore
@@ -229,7 +229,7 @@ func (writer *TimedThemeWriter) listen(writeConcurrency int) {
       store := writer.stores[subdomain]
 
       if store == nil { // no store yet. Create.
-        theme := NewThemeRequest(shopId, writer.token)
+        theme := NewThemeRequest(shopId, writer.token, writer.apiUrl)
         store = NewThemeStore(subdomain, writer.dir+subdomain, theme, userNames)
         writer.stores[subdomain] = store
         log.Println("register:", subdomain)
@@ -244,10 +244,11 @@ func (writer *TimedThemeWriter) listen(writeConcurrency int) {
   }
 }
 
-func NewTimedThemeWriter(dir, token string, duration time.Duration, writeConcurrency int) (writer *TimedThemeWriter) {
+func NewTimedThemeWriter(dir, token string, duration time.Duration, writeConcurrency int, apiUrl string) (writer *TimedThemeWriter) {
   writer = &TimedThemeWriter{
     dir:      dir,
     token:    token,
+    apiUrl:   apiUrl,
     Notifier: make(data.EventsChannel, 1),
     duration: duration,
     stores:   make(map[string]*ThemeStore),
@@ -263,12 +264,14 @@ func main() {
     zmqAddress       string
     dir              string
     interval         string
+    apiUrl           string
     writeConcurrency int
   )
 
   flag.StringVar(&zmqAddress, "zmqsocket", "tcp://127.0.0.1:6000", "ZMQ socket address to bind to")
   flag.StringVar(&dir, "dir", "./", "root directory to create Git repositories")
   flag.StringVar(&interval, "interval", "10s", "interval to save themes to Git")
+  flag.StringVar(&apiUrl, "api_url", "https://api.bootic.net/v1", "Bootic API URL")
   flag.IntVar(&writeConcurrency, "c", 10, "Git write concurrency buffer")
   flag.Parse()
 
@@ -287,12 +290,13 @@ func main() {
   topic := "theme:"
   zmq, _ := booticzmq.NewZMQSubscriber(zmqAddress, topic)
 
-  timedWriter := NewTimedThemeWriter(dir, token, duration, writeConcurrency)
+  timedWriter := NewTimedThemeWriter(dir, token, duration, writeConcurrency, apiUrl)
 
   zmq.SubscribeToType(timedWriter.Notifier, "all")
 
   log.Println("ZMQ socket started on", zmqAddress, "topic '", topic, "'")
   log.Println("Git repos will be created in", dir, ". Write concurrency of ", writeConcurrency)
+  log.Println("Using Bootic API on", apiUrl)
 
   for {
     select {}
