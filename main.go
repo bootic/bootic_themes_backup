@@ -19,15 +19,17 @@ import (
 )
 
 type AssetOrTemplate struct {
-  Class      []string
-  Properties map[string]string
-  Links      map[string]map[string]string
+  Class      []string `json:"_class"`
+  FileName   string `json:"file_name"`
+  ContentType string `json:"content_type"`
+  Body        string `json:"body"`
+  Name        string `json:"name"`
+  Links      map[string]map[string]string `json:"_links"`
 }
 type Entity struct {
-  Class      []string
-  Properties map[string]string
-  Entities   map[string][]AssetOrTemplate
-  Links      map[string]map[string]string
+  Class       []string `json:"_class"`
+  Entities    map[string][]AssetOrTemplate `json:"_embedded"`
+  Links       map[string]map[string]string `json:"_links"`
 }
 
 type ThemeRequest struct {
@@ -95,11 +97,11 @@ func (store *ThemeStore) writeTemplates() {
   }
 
   for _, template := range store.theme.Data.Entities["templates"] {
-    s := []string{template.Properties["name"], template.Properties["content_type"]}
+    s := []string{template.Name, template.ContentType}
     fileName := strings.Join(s, ".")
     dirAndFile := strings.Join([]string{store.dir, fileName}, "/")
     // write file
-    err := ioutil.WriteFile(dirAndFile, []byte(template.Properties["body"]), 0644)
+    err := ioutil.WriteFile(dirAndFile, []byte(template.Body), 0644)
     if err != nil {
       log.Println("error: Could not write file", dirAndFile)
     }
@@ -114,7 +116,7 @@ func (store *ThemeStore) writeAssets() {
     // Otherwise I sometimes get "too many open files"
     // https://groups.google.com/forum/#!topic/golang-nuts/7yXXjgcOikM
     func() {
-      dirAndFile := strings.Join([]string{store.dir, "assets", asset.Properties["file_name"]}, "/")
+      dirAndFile := strings.Join([]string{store.dir, "assets", asset.FileName}, "/")
       link := asset.Links["file"]
       if link == nil {
         link = asset.Links["image"]
