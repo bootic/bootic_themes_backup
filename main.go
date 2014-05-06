@@ -29,7 +29,7 @@ type AssetOrTemplate struct {
 type Entity struct {
   Class       []string `json:"_class"`
   Entities    map[string][]AssetOrTemplate `json:"_embedded"`
-  Links       map[string]map[string]string `json:"_links"`
+  Links       map[string]interface{} `json:"_links"`
 }
 
 type ThemeRequest struct {
@@ -55,6 +55,7 @@ func (req *ThemeRequest) Get() error {
   var data *Entity
 
   dec := json.NewDecoder(resp.Body)
+
   err = dec.Decode(&data)
   if err != nil {
     return err
@@ -262,6 +263,8 @@ func NewTimedThemeWriter(dir, token string, duration time.Duration, writeConcurr
 }
 
 func main() {
+  log.SetFlags(log.Lshortfile | log.Ldate | log.Ltime)
+
   var (
     zmqAddress       string
     dir              string
